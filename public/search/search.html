@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../styles.css">
+    <title>Pesquisar ATMs</title>
+    <style>
+        /* Estilos do seu HTML */
+    </style>
+</head>
+<body>
+    <h1>Pesquisar ATMs</h1>
+
+    <button class="back-button" onclick="window.location.href='../index.html'">Voltar ao Início</button>
+
+    <input type="text" id="searchBanco" placeholder="Nome do banco">
+    <input type="text" id="searchBairro" placeholder="Nome do bairro">
+
+    <button id="searchButton">Pesquisar</button>
+
+    <div id="loading" class="loading">Carregando...</div>
+    <div id="resultado"></div>
+
+    <h2>Legenda dos Emojis:</h2>
+    <ul>
+        <li>💰 Dinheiro Disponível</li>
+        <li>🚫 Sem Dinheiro</li>
+        <li>❤️ Fora de Serviço</li>
+    </ul>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-app.js";
+        import { getFirestore, collection, getDocs, query, where, updateDoc } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyCcVkEALq5uJH8yIpvIlnNLHBjPLUUzb_s",
+            authDomain: "numbutatoa.firebaseapp.com",
+            projectId: "numbutatoa",
+            storageBucket: "numbutatoa.appspot.com",
+            messagingSenderId: "659873259259",
+            appId: "1:659873259259:web:eba1ce3a5c6c9ed79a9a5e",
+            measurementId: "G-CRB1ML2JDB"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function atualizarATMs() {
+            const atmRef = collection(db, "ATMs");
+            const querySnapshot = await getDocs(atmRef);
+            const promises = [];
+
+            querySnapshot.forEach(doc => {
+                const atmData = doc.data();
+                const updatedData = {
+                    status: atmData.status,
+                    infoAdicional: atmData.infoAdicional,
+                };
+                promises.push(updateDoc(doc.ref, updatedData));
+            });
+
+            await Promise.all(promises);
+        }
+
+        async function pesquisarATMs() {
+            const bancoValue = document.getElementById("searchBanco").value.toLowerCase();
+            const bairroValue = document.getElementById("searchBairro").value.toLowerCase();
+
+            const resultadoDiv = document.getElementById("resultado");
+            resultadoDiv.innerHTML = "";
+            const loadingDiv = document.getElementById("loading");
+            loadingDiv.style.display = "block";
+
+            let pontos = parseInt(localStorage.getItem("pontos")) || 0;
+
+            if (pontos <= 0) {
+                loadingDiv.style.display = "none";
+                alert("Você precisa ter pelo menos 1 ponto para pesquisar ATMs.");
+                return;
+            }
+
+            // Deduz 1 ponto ao pesquisar
+            pontos -= 1;
+            localStorage.setItem("pontos", pontos);
+            alert(`Você tem agora ${pontos} pontos restantes.`);
+
+            // Atualiza todos os ATMs antes da pesquisa
+            await atualizarATMs();
+
+            let q = collection(db, "ATMs");
+            let conditions = [];
+
+            if (bancoValue) {
+                conditions.push(where("nomeBanco", ">=", bancoValue));
+                conditions.push(where("nomeBanco", "<=", bancoValue + "\uf8ff"));
+            }
+
+            if (bairroValue) {
+                conditions.push(where("bairro", ">=", bairroValue));
+                conditions.push(where("bairro", "<=", bairroValue + "\uf8ff"));
+            }
+
+            if (conditions.length > 0) {
+                q = query(q, ...conditions);
+            }
+
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                loadingDiv.style.display = "none";
+                resultadoDiv.innerHTML = "<p>Nenhum ATM encontrado.</p>";
+                return;
+            }
+
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const info = data.infoAdicional ? data.infoAdicional : "Sem informações adicionais.";
+                let emojiStatus = "";
+                let statusClass = ""; 
+
+                if (data.status.trim() === "Fora de Serviço") {
+                    emojiStatus = "❤️ Fora de Serviço";
+                    statusClass = "fora_de_servico"; 
+                } else if (data.infoAdicional && data.infoAdicional.includes("Sem Dinheiro")) {
+                    emojiStatus = "🚫 Sem Dinheiro";
+                    statusClass = "sem_dinheiro"; 
+                } else {
+                    emojiStatus = "💰 Dinheiro Disponível";
+                    statusClass = "dinheiro-disponivel"; 
+                }
+
+                const atmDiv = document.createElement("div");
+                atmDiv.classList.add("atm-container", statusClass);
+                atmDiv.innerHTML = `<strong>${emojiStatus}</strong><br>${data.nomeBanco}, ${data.bairro}<br>${info}`;
+                resultadoDiv.appendChild(atmDiv);
+            });
+
+            loadingDiv.style.display = "none";
+
+            // Mostrar o anúncio após 10 segundos
+            setTimeout(() => {
+                showInterstitialAd();
+            }, 10000);
+        }
+
+        // Função para mostrar o anúncio intersticial
+        function showInterstitialAd() {
+            // Inicializa o AdMob e mostra o anúncio
+            const admobId = 'ca-app-pub-9742063011288749/4044360905';
+
+            if (AdMob) {
+                AdMob.interstitial.config({
+                    id: admobId,
+                    autoShow: false,
+                });
+
+                AdMob.interstitial.prepare()
+                    .then(() => {
+                        AdMob.interstitial.show().then(() => {
+                            // Adicione um listener para quando o anúncio for fechado
+                            AdMob.interstitial.on('adClosed', () => {
+                                // Ganhe 1 ponto se o anúncio for assistido
+                                let pontos = parseInt(localStorage.getItem("pontos")) || 0;
+                                pontos += 1;
+                                localStorage.setItem("pontos", pontos);
+                                alert(`Você ganhou 1 ponto! Agora você tem ${pontos} pontos.`);
+                            });
+                        });
+                    });
+            }
+        }
+
+        document.getElementById("searchButton").addEventListener("click", pesquisarATMs);
+    </script>
+    <script src="https://your-admob-script.js"></script> <!-- Certifique-se de incluir seu script do AdMob -->
+</body>
+</html>
